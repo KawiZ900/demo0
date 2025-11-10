@@ -1,0 +1,439 @@
+import pygame, sys, random
+
+pygame.init()
+
+
+
+# --- Ljud ---
+try:
+    shoot_sound = pygame.mixer.Sound("sound/shoot.mp3")
+    shoot_sound.set_volume(0.1)
+except Exception as ex:
+    print("Kunde inte ladda shoot-ljud:", ex)
+    shoot_sound = None
+
+
+
+# Bakgrundsmusik (frivillig)
+try:
+    pygame.mixer.music.load("sound/music.mp3")
+    pygame.mixer.music.play(-1)
+    pygame.mixer.music.set_volume(0.05)
+except Exception as ex:
+    print("Bakgrundsmusik kunde inte laddas:", ex)
+
+
+
+
+# --- Konfiguration ---
+WIDTH, HEIGHT = 800, 600
+TILE = 40
+
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Battle City - Fixed Version")
+clock = pygame.time.Clock()
+
+
+
+# --- Färger ---
+BLACK = (0, 0, 0)
+GREEN = (0, 200, 0)
+RED = (200, 0, 0)
+BROWN = (139, 69, 19)
+GRAY = (100, 100, 100)
+YELLOW = (255, 255, 0)
+BUSH_GREEN = (40, 180, 40)
+GOLD = (255, 215, 0)
+
+
+
+# --- Hjälpfunktioner ---
+def safe_load_image(path, size, fallback_color):
+    try:
+        img = pygame.image.load(path).convert_alpha()
+        return pygame.transform.scale(img, size)
+    except Exception:
+        surf = pygame.Surface(size, pygame.SRCALPHA)
+        surf.fill(fallback_color)
+        return surf
+
+def rotate_tank(image, direction):
+    # 0 = UP, -90 = RIGHT, 180 = DOWN, 90 = LEFT
+    if direction == "UP":
+        return pygame.transform.rotate(image, 0)
+    elif direction == "RIGHT":
+        return pygame.transform.rotate(image, -90)
+    elif direction == "DOWN":
+        return pygame.transform.rotate(image, 180)
+    elif direction == "LEFT":
+        return pygame.transform.rotate(image, 90)
+    return image
+
+def draw_text(text, size, color, center):
+    font = pygame.font.SysFont(None, size)
+    surf = font.render(text, True, color)
+    rect = surf.get_rect(center=center)
+    screen.blit(surf, rect)
+
+
+
+
+# --- Tankbilder ---
+player_img = safe_load_image("img/player_tank.png", (TILE, TILE), GREEN)
+enemy_img = safe_load_image("img/enemy_tank.png", (TILE, TILE), RED)
+base_img = safe_load_image("img/eagle.png", (TILE, TILE), GOLD)
+
+grass_img = safe_load_image("img/grass.png", (TILE, TILE), (0, 180, 0))
+grass_img.set_alpha(180)  # värde mellan 0 (osynligt) och 255 (helt tätt)
+
+water_img = safe_load_image("img/water.png", (TILE, TILE), (0, 0, 200))
+
+
+
+
+# --- Level (map) ---
+levels = [
+    [
+        "WWWWWWWWWWWWWWWWWWWW",
+        "W.GGG..........GGG.W",
+        "W..BB..SS..BB..SS..W",
+        "W..BB..SS..BB..SS..W",
+        "W..VVVVVVVVVVVVVV..W",
+        "W..BB......BB......W",
+        "W..BB......BB......W",
+        "W..................W",
+        "W..SS..BB..SS..BB..W",
+        "W..GG..BB..GG..BB..W",
+        "W..................W",
+        "W..................W",
+        "W.G....SSSSS.....G.W",
+        "WGGG.S.BBBBB..S@GGGW",
+        "WWWWWWWBBPBBWWWWWWW",
+    ],
+    [
+        "WWWWWWWWWWWWWWWWWWWW",
+        "WVVVVVVVVVVVVVVVVVVW",
+        "WV.BBBB....BBBB...VW",
+        "WV.S......VV......SW",
+        "W..S......VV......SW",
+        "W..S......VV......SW",
+        "W..BBBB....BBBB....W",
+        "W..................W",
+        "W.GGGGG......GGGGG.W",
+        "W........GG........W",
+        "W.....SSSSSSSS.....W",
+        "W..................W",
+        "W.G....SSSSS.....G.W",
+        "WGGG.S.BBBBB..S@GGGW",
+        "WWWWWWWBBPBBWWWWWWW",
+    ],
+]
+
+current_level = 0
+total_levels = len(levels)
+
+walls = []
+base_rect = None
+
+def add_wall(x, y, destructible):
+    walls.append({"rect": pygame.Rect(x, y, TILE, TILE), "destructible": destructible})
+
+def load_level(level_data):
+    global base_rect, walls, grass_tiles, water_tiles, player_spawn
+    walls = []
+    grass_tiles = []
+    water_tiles = []
+    base_rect = None
+    player_spawn = None  # ny variabel
+
+    for y, row in enumerate(level_data):
+        for x, tile in enumerate(row):
+            wx, wy = x * TILE, y * TILE
+
+            if tile == "W":      # vägg
+                add_wall(wx, wy, False)
+            elif tile == "B":    # tegel
+                add_wall(wx, wy, True)
+            elif tile == "S":    # stål
+                add_wall(wx, wy, False)
+            elif tile == "P":    # bas
+                base_rect = pygame.Rect(wx, wy, TILE, TILE)
+            elif tile == "G":    # gräs
+                grass_tiles.append(pygame.Rect(wx, wy, TILE, TILE))
+            elif tile == "V":    # vatten
+                water_tiles.append(pygame.Rect(wx, wy, TILE, TILE))
+            elif tile == "@":    # spawnpunkt
+                player_spawn = pygame.Rect(wx, wy, TILE, TILE)
+
+
+
+load_level(levels[current_level])
+
+
+
+
+# --- Spelare ---
+
+player_rect = pygame.Rect(0, 0, TILE, TILE)
+if player_spawn:
+    player_rect.topleft = player_spawn.topleft
+else:
+    player_rect.topleft = (WIDTH//2 - TILE//2, HEIGHT - TILE*2)
+
+player_speed = 4
+player_dir = "UP"
+player_fire_cooldown = 0   # frames tills nästa skott tillåtet
+
+
+
+
+
+# --- Fiender ---
+enemy_positions = [(80, 40), (WIDTH//2, 40), (WIDTH-120, 40)]
+enemy_speed = 3
+enemies = [{"rect": pygame.Rect(x, y, TILE, TILE), "dir": "DOWN", "alive": True, "shoot_timer": 0} for x, y in enemy_positions]
+
+
+
+
+# --- Kulor ---
+player_bullets = []
+enemy_bullets = []
+bullet_speed = 6
+
+
+
+
+# --- Spelstatus ---
+game_over = False
+end_text = ""
+
+
+
+# --- Rörelse & kollision ---
+def can_move(rect, dx, dy):
+    test = rect.move(dx, dy)
+    # Kolla väggar
+    for w in walls:
+        if test.colliderect(w["rect"]):
+            return False
+    # (vattnet blockeras inte längre)
+    # Kolla bas
+    if base_rect and test.colliderect(base_rect):
+        return False
+    # Håll inom skärmen
+    if not screen.get_rect().contains(test):
+        return False
+    return True
+
+
+
+def move_bullets(bullets, owner):
+    global game_over, end_text
+    for b in bullets[:]:
+        if b["dir"] == "UP": b["rect"].y -= bullet_speed
+        elif b["dir"] == "DOWN": b["rect"].y += bullet_speed
+        elif b["dir"] == "LEFT": b["rect"].x -= bullet_speed
+        elif b["dir"] == "RIGHT": b["rect"].x += bullet_speed
+
+        # Kollision med vägg
+        collided = False
+        for w in walls[:]:
+            if b["rect"].colliderect(w["rect"]):
+                if w["destructible"]:
+                    walls.remove(w)
+                if b in bullets:
+                    bullets.remove(b)
+                collided = True
+                break
+        if collided:
+            continue
+
+        for w in water_tiles:
+                if b["rect"].colliderect(w):
+                    if b in bullets:
+                        bullets.remove(b)
+                    collided = True
+                    break
+
+        # Basträff
+        if base_rect and b["rect"].colliderect(base_rect):
+            game_over = True
+            end_text = "BASEN FÖRSTÖRD 💀"
+            if b in bullets:
+                bullets.remove(b)
+            return
+
+        # Spelare/fiender träff
+        if owner == "player":
+            for e in enemies:
+                if e["alive"] and b["rect"].colliderect(e["rect"]):
+                    e["alive"] = False
+                    if b in bullets:
+                        bullets.remove(b)
+                    break
+        else:
+            if b["rect"].colliderect(player_rect):
+                game_over = True
+                end_text = "HaHa LOSER 💥"
+                if b in bullets:
+                    bullets.remove(b)
+                return
+
+        # Ta bort om utanför skärmen
+        if not screen.get_rect().colliderect(b["rect"]):
+            if b in bullets:
+                bullets.remove(b)
+
+
+
+
+
+### --- Huvudloop ---###
+running = True
+while running:
+    dt = clock.tick(60)
+    screen.fill((30, 30, 30))
+
+    for e in pygame.event.get():
+        if e.type == pygame.QUIT:
+            pygame.quit()
+            sys.exit()
+        if e.type == pygame.KEYDOWN and e.key == pygame.K_r:
+            # Reset hela spelet
+            load_level(level_map)
+            player_rect.center = (WIDTH//2, HEIGHT - TILE*1.5)
+            for i, pos in enumerate(enemy_positions):
+                enemies[i]["rect"].center = pos
+                enemies[i]["alive"] = True
+                enemies[i]["dir"] = "DOWN"
+                enemies[i]["shoot_timer"] = 0
+            player_bullets.clear()
+            enemy_bullets.clear()
+            game_over = False
+            end_text = ""
+            player_fire_cooldown = 0
+
+
+
+    # --- Spelarkontroller --- #
+    if not game_over:
+        keys = pygame.key.get_pressed()
+        moved = False
+        if keys[pygame.K_UP] and can_move(player_rect, 0, -player_speed):
+            player_rect.y -= player_speed; player_dir = "UP"; moved = True
+        if keys[pygame.K_DOWN] and can_move(player_rect, 0, player_speed):
+            player_rect.y += player_speed; player_dir = "DOWN"; moved = True
+        if keys[pygame.K_LEFT] and can_move(player_rect, -player_speed, 0):
+            player_rect.x -= player_speed; player_dir = "LEFT"; moved = True
+        if keys[pygame.K_RIGHT] and can_move(player_rect, player_speed, 0):
+            player_rect.x += player_speed; player_dir = "RIGHT"; moved = True
+
+        # Skjut (med cooldown så man inte spammar otroligt många bullets)
+        if player_fire_cooldown > 0:
+            player_fire_cooldown -= 1
+
+        if keys[pygame.K_SPACE] and player_fire_cooldown <= 0:
+            player_fire_cooldown = 12  # cooldown i frames (ungefär 0.2s vid 60fps)
+            bx = player_rect.centerx - 5
+            by = player_rect.centery - 5
+            player_bullets.append({"rect": pygame.Rect(bx, by, 10, 10), "dir": player_dir})
+            if shoot_sound:
+                shoot_sound.play()
+
+
+
+    # --- Fiende-AI ---
+    if not game_over:
+        for e in enemies:
+            if not e["alive"]:
+                continue
+            dx = dy = 0
+            if e["dir"] == "UP": dy = -enemy_speed
+            if e["dir"] == "DOWN": dy = enemy_speed
+            if e["dir"] == "LEFT": dx = -enemy_speed
+            if e["dir"] == "RIGHT": dx = enemy_speed
+
+            if can_move(e["rect"], dx, dy):
+                e["rect"].move_ip(dx, dy)
+            else:
+                e["dir"] = random.choice(["UP", "DOWN", "LEFT", "RIGHT"])
+
+
+
+            # slumpmässig riktändring
+            if random.randint(0, 100) < 2:
+                e["dir"] = random.choice(["UP", "DOWN", "LEFT", "RIGHT"])
+
+
+            # skjut-timer
+            e["shoot_timer"] += 1
+            if e["shoot_timer"] > 60:  # fiende skjuter ungefär var 1s (60 frames)
+                e["shoot_timer"] = 0
+                bx = e["rect"].centerx - 5
+                by = e["rect"].centery - 5
+                enemy_bullets.append({"rect": pygame.Rect(bx, by, 10, 10), "dir": e["dir"]})
+
+
+
+    # --- Kulor rörelse och kollisionshantering ---
+    if not game_over:
+        move_bullets(player_bullets, "player")
+        move_bullets(enemy_bullets, "enemy")
+        if all(not e["alive"] for e in enemies):
+            if current_level + 1 < total_levels:
+                current_level += 1
+                load_level(levels[current_level])
+
+
+                # Återställ spelaren och fiender
+                player_rect.topleft = player_spawn.topleft if player_spawn else (WIDTH // 2, HEIGHT - TILE * 2)
+                player_bullets.clear()
+                enemy_bullets.clear()
+
+
+                # Skapa nya fiender för nästa nivå
+                enemy_positions = [(80, 40), (WIDTH // 2, 40), (WIDTH - 120, 40)]
+                enemies = [{"rect": pygame.Rect(x, y, TILE, TILE), "dir": "DOWN", "alive": True, "shoot_timer": 0} for
+                           x, y in enemy_positions]
+            else:
+                game_over = True
+                end_text = "You Beat All Levels! 🏆"
+
+
+    # --- Rita karta, väggar, bas ---
+    for w in water_tiles:
+        screen.blit(water_img, w)
+    for w in walls:
+        pygame.draw.rect(screen, BROWN if w["destructible"] else GRAY, w["rect"])
+    if base_rect:
+        screen.blit(base_img, base_rect)
+
+
+    # --- Rita spelare och fiender ---
+    screen.blit(rotate_tank(player_img, player_dir), player_rect)
+    for e in enemies:
+        if e["alive"]:
+            screen.blit(rotate_tank(enemy_img, e["dir"]), e["rect"])
+
+
+    # --- Rita kulor ---
+    for b in player_bullets:
+        pygame.draw.rect(screen, YELLOW, b["rect"])
+    for b in enemy_bullets:
+        pygame.draw.rect(screen, RED, b["rect"])
+
+
+    # --- Sluttext ---
+    if game_over:
+        draw_text(end_text, 50, YELLOW, (WIDTH//2, HEIGHT//2))
+        draw_text("Press R to restart the game", 30, (255, 215, 0), (WIDTH//2, HEIGHT//2+60))
+
+
+    # --- Rita gräs (över tankar för snygg effekt) ---
+    for g in grass_tiles:
+            screen.blit(grass_img, g)
+
+    draw_text(f"Level {current_level + 1}/{total_levels}", 25, (255, 255, 255), (70, 20))
+
+    pygame.display.flip()
