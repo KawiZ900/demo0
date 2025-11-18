@@ -14,7 +14,7 @@ except Exception as ex:
 
 
 
-# Bakgrundsmusik (frivillig)
+# Bakgrundsmusik
 try:
     pygame.mixer.music.load("sound/music.mp3")
     pygame.mixer.music.play(-1)
@@ -25,7 +25,7 @@ except Exception as ex:
 
 
 
-# --- Konfiguration ---
+#  Konfiguration 
 WIDTH, HEIGHT = 800, 600
 TILE = 40
 
@@ -35,7 +35,7 @@ clock = pygame.time.Clock()
 
 
 
-# --- Färger ---
+#  Färger
 BLACK = (0, 0, 0)
 GREEN = (0, 200, 0)
 RED = (200, 0, 0)
@@ -47,7 +47,7 @@ GOLD = (255, 215, 0)
 
 
 
-# --- Hjälpfunktioner ---
+#   Hjälpfunktioner
 def safe_load_image(path, size, fallback_color):
     try:
         img = pygame.image.load(path).convert_alpha()
@@ -78,7 +78,7 @@ def draw_text(text, size, color, center):
 
 
 
-# --- Tankbilder ---
+#  Tankbilder 
 player_img = safe_load_image("img/player_tank.png", (TILE, TILE), GREEN)
 enemy_img = safe_load_image("img/enemy_tank.png", (TILE, TILE), RED)
 base_img = safe_load_image("img/eagle.png", (TILE, TILE), GOLD)
@@ -91,7 +91,7 @@ water_img = safe_load_image("img/water.png", (TILE, TILE), (0, 0, 200))
 
 
 
-# --- Level (map) ---
+#  Level (map) 
 levels = [
     [
         "WWWWWWWWWWWWWWWWWWWW",
@@ -172,7 +172,7 @@ load_level(levels[current_level])
 
 
 
-# --- Spelare ---
+#  Spelare 
 
 player_rect = pygame.Rect(0, 0, TILE, TILE)
 if player_spawn:
@@ -188,7 +188,7 @@ player_fire_cooldown = 0   # frames tills nästa skott tillåtet
 
 
 
-# --- Fiender ---
+#  Fiender 
 enemy_positions = [(80, 40), (WIDTH//2, 40), (WIDTH-120, 40)]
 enemy_speed = 3
 enemies = [{"rect": pygame.Rect(x, y, TILE, TILE), "dir": "DOWN", "alive": True, "shoot_timer": 0} for x, y in enemy_positions]
@@ -196,7 +196,7 @@ enemies = [{"rect": pygame.Rect(x, y, TILE, TILE), "dir": "DOWN", "alive": True,
 
 
 
-# --- Kulor ---
+#  Kulor 
 player_bullets = []
 enemy_bullets = []
 bullet_speed = 6
@@ -204,13 +204,13 @@ bullet_speed = 6
 
 
 
-# --- Spelstatus ---
+#  Spelstatus
 game_over = False
 end_text = ""
 
 
 
-# --- Rörelse & kollision ---
+#  Rörelse & kollision 
 def can_move(rect, dx, dy):
     test = rect.move(dx, dy)
     # Kolla väggar
@@ -289,7 +289,7 @@ def move_bullets(bullets, owner):
 
 
 
-### --- Huvudloop ---###
+###  Huvudloop ###
 running = True
 while running:
     dt = clock.tick(60)
@@ -316,7 +316,7 @@ while running:
 
 
 
-    # --- Spelarkontroller --- #
+    # Spelarkontroller  #
     if not game_over:
         keys = pygame.key.get_pressed()
         moved = False
@@ -343,7 +343,7 @@ while running:
 
 
 
-    # --- Fiende-AI ---
+    #  Fiende
     if not game_over:
         for e in enemies:
             if not e["alive"]:
@@ -376,7 +376,7 @@ while running:
 
 
 
-    # --- Kulor rörelse och kollisionshantering ---
+    #  Kulor rörelse och kollisionshantering 
     if not game_over:
         move_bullets(player_bullets, "player")
         move_bullets(enemy_bullets, "enemy")
@@ -386,7 +386,7 @@ while running:
                 load_level(levels[current_level])
 
 
-                # Återställ spelaren och fiender
+                # Återställ spelaren/fiender
                 player_rect.topleft = player_spawn.topleft if player_spawn else (WIDTH // 2, HEIGHT - TILE * 2)
                 player_bullets.clear()
                 enemy_bullets.clear()
@@ -401,7 +401,7 @@ while running:
                 end_text = "You Beat All Levels! 🏆"
 
 
-    # --- Rita karta, väggar, bas ---
+    #  Rita karta, väggar, bas
     for w in water_tiles:
         screen.blit(water_img, w)
     for w in walls:
@@ -410,27 +410,27 @@ while running:
         screen.blit(base_img, base_rect)
 
 
-    # --- Rita spelare och fiender ---
+    #  Rita spelare och fiender 
     screen.blit(rotate_tank(player_img, player_dir), player_rect)
     for e in enemies:
         if e["alive"]:
             screen.blit(rotate_tank(enemy_img, e["dir"]), e["rect"])
 
 
-    # --- Rita kulor ---
+    #  Rita kulor 
     for b in player_bullets:
         pygame.draw.rect(screen, YELLOW, b["rect"])
     for b in enemy_bullets:
         pygame.draw.rect(screen, RED, b["rect"])
 
 
-    # --- Sluttext ---
+    #  Sluttext 
     if game_over:
         draw_text(end_text, 50, YELLOW, (WIDTH//2, HEIGHT//2))
         draw_text("Press R to restart the game", 30, (255, 215, 0), (WIDTH//2, HEIGHT//2+60))
 
 
-    # --- Rita gräs (över tankar för snygg effekt) ---
+    #  Rita gräs (över tankar för snygg effekt)
     for g in grass_tiles:
             screen.blit(grass_img, g)
 
