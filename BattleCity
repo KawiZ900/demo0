@@ -4,7 +4,7 @@ pygame.init()
 
 
 
-#  Ljud 
+##  Ljud ##
 try:
     shoot_sound = pygame.mixer.Sound("sound/shoot.mp3")
     shoot_sound.set_volume(0.1)
